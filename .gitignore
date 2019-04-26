@@ -2,3 +2,5 @@
 .ftpconfig
 *.orig
 tmp
+*.pyc
+tflib/model/*
