@@ -49,7 +49,7 @@ Note that for `Extragradient` from the past the extrapolation is done before com
 ## Experiments
 
 To run the WGAN-GP experiment with ExtraAdam and the ResNet architecture on CIFAR10 with the parameters from the paper:
-`python train_extradam.py results\ --default --model resnet`
+`python train_extraadam.py results\ --default --model resnet --cuda`
 
 The `--default` option loads the hyperparameters used in the paper for each experiments, they are available as JSON files in the `config` folder.
 
