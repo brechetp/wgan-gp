@@ -5,6 +5,8 @@ If you find this code useful please cite as:
 
 **Gauthier Gidel, Hugo Berard, Gaetan Vignoud, Pascal Vincent, Simon Lacoste-Julien, [A Variational Inequality Perspective on Generative Adversarial Networks](https://arxiv.org/abs/1802.10551), International Conference on Learning Representations (ICLR 2019), 2019.**
 
+Code mostly written by Hugo Berard while at Facebook AI Research, for any questions about the code please contact (berard.hugo@gmail.com)
+
 ## Requirements
 
 The code is in `pytorch` and was tested for:
