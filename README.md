@@ -1,11 +1,16 @@
-# Code for a [Variational Inequality Perspective for Generative Adversarial Networks](https://arxiv.org/abs/1802.10551)
+# Code for a [A Variational Inequality Perspective for Generative Adversarial Networks](https://arxiv.org/abs/1802.10551)
+
+This is the code associated with the paper [A Variational Inequality Perspective for Generative Adversarial Networks](https://arxiv.org/abs/1802.10551).
+If you find this code useful please cite as:
+
+**Gauthier Gidel, Hugo Berard, Gaetan Vignoud, Pascal Vincent, Simon Lacoste-Julien, [A Variational Inequality Perspective on Generative Adversarial Networks](https://arxiv.org/abs/1802.10551), International Conference on Learning Representations (ICLR 2019), 2019.**
 
 ## Requirements
 
 The code is in `pytorch` and was tested for:
 - pytorch=0.4.0
 
-The inception score is computed using the original implementation from OpenAI [](https://github.com/openai/improved-gan/tree/master/inception_score), and thus requires `tensorflow` <= 1.5.0 to be installed.
+(Optional) The inception score is computed using the original implementation from OpenAI [](https://github.com/openai/improved-gan/tree/master/inception_score), and thus requires `tensorflow` <= 1.5.0 to be installed.
 
 A conda environement is also provided (requires CUDA 9):
 `conda env create -f environment.yml`
