@@ -1,7 +1,7 @@
 # MIT License
 
-# Copyright (c) 2019 Marvin Cao
 # Copyright (c) 2017 Ishaan Gulrajani
+# Copyright (c) 2017 Marvin Cao
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal

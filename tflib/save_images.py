@@ -1,6 +1,5 @@
 # MIT License
 
-# Copyright (c) 2019 Marvin Cao
 # Copyright (c) 2017 Ishaan Gulrajani
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -20,7 +19,8 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-çé"""
+
+"""
 Image grid saver, based on color_grid_vis from github.com/Newmu
 """
 
