@@ -1,3 +1,4 @@
+
 #  MIT License
 
 # Copyright (c) Facebook, Inc. and its affiliates.
@@ -39,55 +40,56 @@ import shutil
 import sys
 
 import data
-
 import models
+from models import LinearNet
 import utils
 from optim import ExtraAdam
+from normalizers import LipschitzNormalizer
 
 parser = argparse.ArgumentParser()
 parser.add_argument('output')
-parser.add_argument('--model', choices=('resnet', 'dcgan'), default='resnet')
+parser.add_argument('--model', choices=('linear'), default='linear')
 parser.add_argument('--cuda', action='store_true')
 parser.add_argument('-bs' ,'--batch-size', default=64, type=int)
-parser.add_argument('--num-iter', default=500000, type=int)
-parser.add_argument('-lrd', '--learning-rate-dis', default=2e-4, type=float)
-parser.add_argument('-lrg', '--learning-rate-gen', default=2e-5, type=float)
+parser.add_argument('--num-iter', default=5000, type=int)
+parser.add_argument('-lrd', '--learning-rate-dis', default=2e-2, type=float)
+parser.add_argument('-lrg', '--learning-rate-gen', default=2e-3, type=float)
 parser.add_argument('-b1' ,'--beta1', default=0.5, type=float)
 parser.add_argument('-b2' ,'--beta2', default=0.9, type=float)
 parser.add_argument('-ema', default=0.9999, type=float)
-parser.add_argument('-nz' ,'--num-latent', default=128, type=int)
+parser.add_argument('-nz' ,'--num-latent', default=10, type=int)
 parser.add_argument('-nfd' ,'--num-filters-dis', default=128, type=int)
 parser.add_argument('-nfg' ,'--num-filters-gen', default=128, type=int)
-parser.add_argument('-gp', '--gradient-penalty', default=10, type=float)
+parser.add_argument('-ln', '--lipschitz-normalizer', default=1, type=int, help='the number of iterations for lipschitz normalizer')
 parser.add_argument('-m', '--mode', choices=('gan','ns-gan', 'wgan'), default='wgan')
 parser.add_argument('-c', '--clip', default=0.01, type=float)
 parser.add_argument('-d', '--distribution', choices=('normal', 'uniform'), default='normal')
 parser.add_argument('--batchnorm-dis', action='store_true')
 parser.add_argument('--seed', default=1234, type=int)
 parser.add_argument('--tensorboard', action='store_true')
-parser.add_argument('--inception-score', action='store_true')
+# parser.add_argument('--inception-score', action='store_true')
 parser.add_argument('--default', action='store_true')
 args = parser.parse_args()
 
 CUDA = args.cuda
 MODEL = args.model
-GRADIENT_PENALTY = args.gradient_penalty
+LIPSCHITZ_NORMALIZER = args.lipschitz_normalizer
 OUTPUT_PATH = args.output
 TENSORBOARD_FLAG = args.tensorboard
-INCEPTION_SCORE_FLAG = args.inception_score
+# INCEPTION_SCORE_FLAG = args.inception_score
 
-if args.default:
-    if args.model == 'resnet' and args.gradient_penalty != 0:
-        config = "config/default_resnet_wgangp_pastextraadam.json"
-    elif args.model == 'dcgan' and args.gradient_penalty != 0:
-        config = "config/default_dcgan_wgangp_pastextraadam.json"
-    elif args.model == 'dcgan' and args.gradient_penalty == 0:
-        config = "config/default_dcgan_wgan_pastextraadam.json"
-    else:
-        raise ValueError("Not default config available for this.")
-    with open(config) as f:
-        data = json.load(f)
-    args = argparse.Namespace(**data)
+# if args.default:
+    # if args.model == 'resnet' and args.gradient_penalty != 0:
+        # config = "config/default_resnet_wgangp_pastextraadam.json"
+    # elif args.model == 'dcgan' and args.gradient_penalty != 0:
+        # config = "config/default_dcgan_wgangp_pastextraadam.json"
+    # elif args.model == 'dcgan' and args.gradient_penalty == 0:
+        # config = "config/default_dcgan_wgan_pastextraadam.json"
+    # else:
+        # raise ValueError("Not default config available for this.")
+    # with open(config) as f:
+        # data = json.load(f)
+    # args = argparse.Namespace(**data)
 
 BATCH_SIZE = args.batch_size
 N_ITER = args.num_iter
@@ -116,8 +118,8 @@ n_gen_update = 0
 n_dis_update = 0
 total_time = 0
 
-if GRADIENT_PENALTY:
-    OUTPUT_PATH = os.path.join(OUTPUT_PATH, '%s_%s-gp'%(MODEL, MODE), '%s/lrd=%.1e_lrg=%.1e/s%i/%i'%('pastextraadam', LEARNING_RATE_D, LEARNING_RATE_G, SEED, int(time.time())))
+if LIPSCHITZ_NORMALIZER:
+    OUTPUT_PATH = os.path.join(OUTPUT_PATH, '%s_%s-lipnrm'%(MODEL, MODE), '%s/lrd=%.1e_lrg=%.1e/s%i/%i'%('pastextraadam', LEARNING_RATE_D, LEARNING_RATE_G, SEED, int(time.time())))
 else:
     OUTPUT_PATH = os.path.join(OUTPUT_PATH, '%s_%s'%(MODEL, MODE), '%s/lrd=%.1e_lrg=%.1e/s%i/%i'%('pastextraadam', LEARNING_RATE_D, LEARNING_RATE_G, SEED, int(time.time())))
 
@@ -126,17 +128,15 @@ if TENSORBOARD_FLAG:
     writer = SummaryWriter(log_dir=os.path.join(OUTPUT_PATH, 'tensorboard'))
     writer.add_text('config', json.dumps(vars(args), indent=2, sort_keys=True))
 
-transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))])
+# transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))])
 
 # trainset = torchvision.datasets.CIFAR10(root='./data', train=True, transform=transform, download=True)
 # trainloader = torch.utils.data.DataLoader(trainset, batch_size=BATCH_SIZE, shuffle=True, num_workers=1)
-trainloader = data.get_2dgaussian(1, batch_size=BATCH_SIZE, nsample=6000)
+trainloader = data.get_2dgaussian(1, batch_size=BATCH_SIZE, mean=[2,2])
 
 # testset = torchvision.datasets.CIFAR10(root='./data', train=False, transform=transform, download=True)
-# testloader = torch.utils.data.DataLoader(testset, batch_size=BATCH_SIZE, num_workers=1)
-testloader = data.get_2dgaussian(1, batch_size=BATCH_SIZE, nsample=600)
-
-# testloader = torch.utils.data.DataLoader(testset, batch_size=BATCH_SIZE, num_workers=1)
+#testloader = torch.utils.data.DataLoader(testset, batch_size=BATCH_SIZE, num_workers=1)
+testloader = data.get_2dgaussian(1, batch_size=BATCH_SIZE, mean=[2,2])
 
 print('Init....')
 if not os.path.exists(os.path.join(OUTPUT_PATH, 'checkpoints')):
@@ -144,34 +144,33 @@ if not os.path.exists(os.path.join(OUTPUT_PATH, 'checkpoints')):
 if not os.path.exists(os.path.join(OUTPUT_PATH, 'gen')):
     os.makedirs(os.path.join(OUTPUT_PATH, 'gen'))
 
-if INCEPTION_SCORE_FLAG:
-    import tflib
-    import tflib.inception_score
-    def get_inception_score():
-        all_samples = []
-        samples = torch.randn(N_SAMPLES, N_LATENT)
-        for i in range(0, N_SAMPLES, 100):
-            samples_100 = samples[i:i+100].cuda(0)
-            all_samples.append(gen(samples_100).cpu().data.numpy())
+# if INCEPTION_SCORE_FLAG:
+    # import tflib
+    # import tflib.inception_score
+    # def get_inception_score():
+        # all_samples = []
+        # samples = torch.randn(N_SAMPLES, N_LATENT)
+        # for i in range(0, N_SAMPLES, 100):
+            # samples_100 = samples[i:i+100].cuda(0)
+            # all_samples.append(gen(samples_100).cpu().data.numpy())
 
-        all_samples = np.concatenate(all_samples, axis=0)
-        all_samples = np.multiply(np.add(np.multiply(all_samples, 0.5), 0.5), 255).astype('int32')
-        all_samples = all_samples.reshape((-1, N_CHANNEL, RESOLUTION, RESOLUTION)).transpose(0, 2, 3, 1)
-        return tflib.inception_score.get_inception_score(list(all_samples))
+        # all_samples = np.concatenate(all_samples, axis=0)
+        # all_samples = np.multiply(np.add(np.multiply(all_samples, 0.5), 0.5), 255).astype('int32')
+        # all_samples = all_samples.reshape((-1, N_CHANNEL, RESOLUTION, RESOLUTION)).transpose(0, 2, 3, 1)
+        # return tflib.inception_score.get_inception_score(list(all_samples))
 
-    inception_f = open(os.path.join(OUTPUT_PATH, 'inception.csv'), 'ab')
-    inception_writter = csv.writer(inception_f)
+    # inception_f = open(os.path.join(OUTPUT_PATH, 'inception.csv'), 'ab')
+    # inception_writter = csv.writer(inception_f)
 
-if MODEL == "resnet":
-    gen = models.ResNet32Generator(N_LATENT, N_CHANNEL, N_FILTERS_G, BATCH_NORM_G)
-    dis = models.ResNet32Discriminator(N_CHANNEL, 1, N_FILTERS_D, BATCH_NORM_D)
-elif MODEL == "dcgan":
-    gen = models.DCGAN32Generator(N_LATENT, N_CHANNEL, N_FILTERS_G, batchnorm=BATCH_NORM_G)
-    dis = models.DCGAN32Discriminator(N_CHANNEL, 1, N_FILTERS_D, batchnorm=BATCH_NORM_D)
-elif MODEL == "linear":
-    DIM = 2
-    gen = models.LinearGenerator(N_LATENT, DIM)
-    dis = models.LinearDiscriminator(DIM)
+# if MODEL == "resnet":
+    # gen = models.ResNet32Generator(N_LATENT, N_CHANNEL, N_FILTERS_G, BATCH_NORM_G)
+    # dis = models.ResNet32Discriminator(N_CHANNEL, 1, N_FILTERS_D, BATCH_NORM_D)
+# elif MODEL == "dcgan":
+    # gen = models.DCGAN32Generator(N_LATENT, N_CHANNEL, N_FILTERS_G, batchnorm=BATCH_NORM_G)
+    # dis = models.DCGAN32Discriminator(N_CHANNEL, 1, N_FILTERS_D, batchnorm=BATCH_NORM_D)
+if MODEL == "linear":
+    gen = models.LinearNet(indim=N_LATENT, shape=[10], outdim=2)
+    dis = models.LinearDiscriminator(indim=2, shape=[10])
 
 if CUDA:
     gen = gen.cuda(0)
@@ -182,9 +181,10 @@ dis.apply(lambda x: utils.weight_init(x, mode='normal'))
 
 dis_optimizer = ExtraAdam(dis.parameters(), lr=LEARNING_RATE_D, betas=(BETA_1, BETA_2))
 gen_optimizer = ExtraAdam(gen.parameters(), lr=LEARNING_RATE_G, betas=(BETA_1, BETA_2))
+dis_normalizer = LipschitzNormalizer(dis.parameters(), niter=LIPSCHITZ_NORMALIZER)
 
-# with open(os.path.join(OUTPUT_PATH, 'config.json'), 'wb') as f:
-    # json.dump(vars(args), f)
+with open(os.path.join(OUTPUT_PATH, 'config.json'), 'w') as f:
+    json.dump(vars(args), f)
 
 dataiter = iter(testloader)
 examples, labels = next(dataiter)
@@ -200,7 +200,7 @@ for param in gen.parameters():
     gen_param_avg.append(param.data.clone())
     gen_param_ema.append(param.data.clone())
 
-f = open(os.path.join(OUTPUT_PATH, 'results.csv'), 'ab')
+f = open(os.path.join(OUTPUT_PATH, 'results.csv'), 'a')
 f_writter = csv.writer(f)
 
 print('Training...')
@@ -210,8 +210,8 @@ while n_gen_update < N_ITER:
     t = time.time()
     avg_loss_G = 0
     avg_loss_D = 0
-    avg_penalty = 0
-    num_samples = 0
+    avg_lipnrm = 0
+    num_iter = 0
     penalty = Variable(torch.Tensor([0.]))
     if CUDA:
         penalty = penalty.cuda(0)
@@ -225,28 +225,31 @@ while n_gen_update < N_ITER:
             x_true = x_true.cuda(0)
             z = z.cuda(0)
 
+        if LIPSCHITZ_NORMALIZER:
+            dis_normalizer.normalize()
+
         dis_optimizer.extrapolation()
         gen_optimizer.extrapolation()
 
-        if MODE =='wgan' and not GRADIENT_PENALTY:
+        if MODE =='wgan' and not LIPSCHITZ_NORMALIZER:
             for p in dis.parameters():
                 p.data.clamp_(-CLIP, CLIP)
+
 
         x_gen = gen(z)
         p_true, p_gen = dis(x_true), dis(x_gen)
 
         gen_loss = utils.compute_gan_loss(p_true, p_gen, mode=MODE)
         dis_loss = - gen_loss.clone()
-        if GRADIENT_PENALTY:
-            penalty = dis.get_penalty(x_true.data, x_gen.data)
-            dis_loss += GRADIENT_PENALTY*penalty
+            # penalty = dis.get_penalty(x_true.data, x_gen.data)
+            # dis_loss += LIPSCHITZ_NORMALIZER*penalty
 
         for p in gen.parameters():
             p.requires_grad = False
         dis_optimizer.zero_grad()
         dis_loss.backward(retain_graph=True)
         dis_optimizer.step()
-        if MODE =='wgan' and not GRADIENT_PENALTY:
+        if MODE =='wgan' and not LIPSCHITZ_NORMALIZER:
             for p in dis.parameters():
                 p.data.clamp_(-CLIP, CLIP)
         for p in gen.parameters():
@@ -267,20 +270,20 @@ while n_gen_update < N_ITER:
 
         total_time += time.time() - _t
 
-        avg_loss_D += dis_loss.item()*len(x_true)
-        avg_loss_G += gen_loss.item()*len(x_true)
-        avg_penalty += penalty.item()*len(x_true)
-        num_samples += len(x_true)
+        avg_loss_D += dis_loss.item()
+        avg_loss_G += gen_loss.item()
+        avg_lipnrm += dis_normalizer.eval_lipnrm().item()
+        num_iter += 1
 
         if n_gen_update%EVAL_FREQ == 1:
-            if INCEPTION_SCORE_FLAG:
-                gen_inception_score = get_inception_score()[0]
+            # if INCEPTION_SCORE_FLAG:
+                # gen_inception_score = get_inception_score()[0]
 
-                inception_writter.writerow((n_gen_update, gen_inception_score, total_time))
-                inception_f.flush()
+                # inception_writter.writerow((n_gen_update, gen_inception_score, total_time))
+                # inception_f.flush()
 
-                if TENSORBOARD_FLAG:
-                    writer.add_scalar('inception_score', gen_inception_score, n_gen_update)
+                # if TENSORBOARD_FLAG:
+                    # writer.add_scalar('inception_score', gen_inception_score, n_gen_update)
 
 
             torch.save({'args': vars(args), 'n_gen_update': n_gen_update, 'total_time': total_time, 'state_gen': gen.state_dict(), 'gen_param_avg': gen_param_avg, 'gen_param_ema': gen_param_ema}, os.path.join(OUTPUT_PATH, "checkpoints/%i.state"%n_gen_update))
@@ -288,13 +291,13 @@ while n_gen_update < N_ITER:
 
         n_iteration_t += 1
 
-    avg_loss_G /= num_samples
-    avg_loss_D /= num_samples
-    avg_penalty /= num_samples
+    avg_loss_G /= num_iter
+    avg_loss_D /= num_iter
+    avg_lipnrm /= num_iter
 
-    print('Iter: %i, Loss Generator: %.4f, Loss Discriminator: %.4f, Penalty: %.2e, IS: %.2f, Time: %.4f'%(n_gen_update, avg_loss_G, avg_loss_D, avg_penalty, gen_inception_score, time.time() - t))
+    print('Iter: %i, Loss Generator: %.4f, Loss Discriminator: %.4f, LN: %.2f, Time: %.4f'%(n_gen_update, avg_loss_G, avg_loss_D, avg_lipnrm,  time.time() - t))
 
-    f_writter.writerow((n_gen_update, avg_loss_G, avg_loss_D, avg_penalty, time.time() - t))
+    f_writter.writerow((n_gen_update, avg_loss_G, avg_loss_D, avg_lipnrm, time.time() - t))
     f.flush()
 
     x_gen = gen(z_examples)

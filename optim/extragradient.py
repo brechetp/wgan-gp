@@ -74,7 +74,7 @@ class Extragradient(Optimizer):
         if closure is not None:
             loss = closure()
 
-        i = -1
+        i = -1  # index in the params_copy (populated by extrapolation)
         for group in self.param_groups:
             for p in group['params']:
                 i += 1

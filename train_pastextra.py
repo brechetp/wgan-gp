@@ -1,3 +1,4 @@
+
 #  MIT License
 
 # Copyright (c) Facebook, Inc. and its affiliates.
@@ -42,14 +43,14 @@ import data
 
 import models
 import utils
-from optim import ExtraAdam
+from optim import ExtraSGD
 
 parser = argparse.ArgumentParser()
 parser.add_argument('output')
 parser.add_argument('--model', choices=('resnet', 'dcgan'), default='resnet')
 parser.add_argument('--cuda', action='store_true')
 parser.add_argument('-bs' ,'--batch-size', default=64, type=int)
-parser.add_argument('--num-iter', default=500000, type=int)
+parser.add_argument('--num-iter', default=5000, type=int)
 parser.add_argument('-lrd', '--learning-rate-dis', default=2e-4, type=float)
 parser.add_argument('-lrg', '--learning-rate-gen', default=2e-5, type=float)
 parser.add_argument('-b1' ,'--beta1', default=0.5, type=float)
@@ -58,7 +59,7 @@ parser.add_argument('-ema', default=0.9999, type=float)
 parser.add_argument('-nz' ,'--num-latent', default=128, type=int)
 parser.add_argument('-nfd' ,'--num-filters-dis', default=128, type=int)
 parser.add_argument('-nfg' ,'--num-filters-gen', default=128, type=int)
-parser.add_argument('-gp', '--gradient-penalty', default=10, type=float)
+parser.add_argument('-gp', '--gradient-penalty', default=0, type=float)
 parser.add_argument('-m', '--mode', choices=('gan','ns-gan', 'wgan'), default='wgan')
 parser.add_argument('-c', '--clip', default=0.01, type=float)
 parser.add_argument('-d', '--distribution', choices=('normal', 'uniform'), default='normal')
@@ -180,8 +181,8 @@ if CUDA:
 gen.apply(lambda x: utils.weight_init(x, mode='normal'))
 dis.apply(lambda x: utils.weight_init(x, mode='normal'))
 
-dis_optimizer = ExtraAdam(dis.parameters(), lr=LEARNING_RATE_D, betas=(BETA_1, BETA_2))
-gen_optimizer = ExtraAdam(gen.parameters(), lr=LEARNING_RATE_G, betas=(BETA_1, BETA_2))
+dis_optimizer = ExtraSGD(dis.parameters(), lr=LEARNING_RATE_D)#, betas=(BETA_1, BETA_2))
+gen_optimizer = ExtraSGD(gen.parameters(), lr=LEARNING_RATE_G)#, betas=(BETA_1, BETA_2))
 
 # with open(os.path.join(OUTPUT_PATH, 'config.json'), 'wb') as f:
     # json.dump(vars(args), f)
