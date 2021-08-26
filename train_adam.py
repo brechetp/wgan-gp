@@ -37,6 +37,7 @@ import json
 import csv
 import shutil
 import sys
+from normalizers import LipschitzNormalizer
 
 import models
 import utils
@@ -56,6 +57,7 @@ parser.add_argument('-nz' ,'--num-latent', default=128, type=int)
 parser.add_argument('-nfd' ,'--num-filters-dis', default=128, type=int)
 parser.add_argument('-nfg' ,'--num-filters-gen', default=128, type=int)
 parser.add_argument('-gp', '--gradient-penalty', default=10, type=float)
+parser.add_argument('-ln', '--lipschitz-normalizer', default=1, type=int, help='the number of iterations for lipschitz normalizer')
 parser.add_argument('-m', '--mode', choices=('gan','ns-gan', 'wgan'), default='wgan')
 parser.add_argument('-c', '--clip', default=0.01, type=float)
 parser.add_argument('-d', '--distribution', choices=('normal', 'uniform'), default='normal')
@@ -74,6 +76,7 @@ OUTPUT_PATH = args.output
 TENSORBOARD_FLAG = args.tensorboard
 INCEPTION_SCORE_FLAG = args.inception_score
 UPDATE_FREQUENCY = args.update_frequency
+LIPSCHITZ_NORMALIZER = args.lipschitz_normalizer
 
 if args.default:
     try:
@@ -115,10 +118,13 @@ n_gen_update = 0
 n_dis_update = 0
 total_time = 0
 
+suffix = ''
+if LIPSCHITZ_NORMALIZER:
+    suffix += '-lipnrm'
 if GRADIENT_PENALTY:
-    OUTPUT_PATH = os.path.join(OUTPUT_PATH, '%s_%s-gp'%(MODEL, MODE), '%s_%i/lrd=%.1e_lrg=%.1e/s%i/%i'%('adam', UPDATE_FREQUENCY, LEARNING_RATE_D, LEARNING_RATE_G, SEED, int(time.time())))
-else:
-    OUTPUT_PATH = os.path.join(OUTPUT_PATH, '%s_%s'%(MODEL, MODE), '%s_%i/lrd=%.1e_lrg=%.1e/s%i/%i'%('adam', UPDATE_FREQUENCY, LEARNING_RATE_D, LEARNING_RATE_G, SEED, int(time.time())))
+    suffix += '-gp'
+
+OUTPUT_PATH = os.path.join(OUTPUT_PATH, '%s_%s%s'%(MODEL, MODE, suffix), '%s/lrd=%.1e_lrg=%.1e/s%i/%i'%('pastextrasgd', LEARNING_RATE_D, LEARNING_RATE_G, SEED, int(time.time())))
 
 if TENSORBOARD_FLAG:
     from tensorboardX import SummaryWriter
@@ -133,7 +139,7 @@ trainloader = torch.utils.data.DataLoader(trainset, batch_size=BATCH_SIZE, shuff
 testset = torchvision.datasets.CIFAR10(root='./data', train=False, transform=transform, download=True)
 testloader = torch.utils.data.DataLoader(testset, batch_size=BATCH_SIZE, num_workers=1)
 
-print 'Init....'
+print('Init....')
 if not os.path.exists(os.path.join(OUTPUT_PATH, 'checkpoints')):
     os.makedirs(os.path.join(OUTPUT_PATH, 'checkpoints'))
 if not os.path.exists(os.path.join(OUTPUT_PATH, 'gen')):
@@ -145,7 +151,7 @@ if INCEPTION_SCORE_FLAG:
     def get_inception_score():
         all_samples = []
         samples = torch.randn(N_SAMPLES, N_LATENT)
-        for i in xrange(0, N_SAMPLES, 100):
+        for i in range(0, N_SAMPLES, 100):
             samples_100 = samples[i:i+100].cuda(0)
             all_samples.append(gen(samples_100).cpu().data.numpy())
 
@@ -173,12 +179,13 @@ dis.apply(lambda x: utils.weight_init(x, mode='normal'))
 
 dis_optimizer = optim.Adam(dis.parameters(), lr=LEARNING_RATE_D, betas=(BETA_1, BETA_2))
 gen_optimizer = optim.Adam(gen.parameters(), lr=LEARNING_RATE_G, betas=(BETA_1, BETA_2))
+dis_normalizer = LipschitzNormalizer(dis.parameters(), niter=LIPSCHITZ_NORMALIZER)
 
-with open(os.path.join(OUTPUT_PATH, 'config.json'), 'wb') as f:
+with open(os.path.join(OUTPUT_PATH, 'config.json'), 'w') as f:
     json.dump(vars(args), f)
 
 dataiter = iter(testloader)
-examples, labels = dataiter.next()
+examples, labels = next(dataiter)
 torchvision.utils.save_image(utils.unormalize(examples), os.path.join(OUTPUT_PATH, 'examples.png'), 10)
 
 z_examples = utils.sample(DISTRIBUTION, (100, N_LATENT))
@@ -194,7 +201,7 @@ for param in gen.parameters():
 f = open(os.path.join(OUTPUT_PATH, 'results.csv'), 'ab')
 f_writter = csv.writer(f)
 
-print 'Training...'
+print('Training...')
 n_iteration_t = 0
 gen_inception_score = 0
 while n_gen_update < N_ITER:
@@ -216,6 +223,9 @@ while n_gen_update < N_ITER:
         if CUDA:
             x_true = x_true.cuda(0)
             z = z.cuda(0)
+
+        if LIPSCHITZ_NORMALIZER:
+            dis_normalizer.normalize()
 
         x_gen = gen(z)
         p_true, p_gen = dis(x_true), dis(x_gen)
@@ -239,7 +249,7 @@ while n_gen_update < N_ITER:
 
             dis_optimizer.step()
 
-            if MODE =='wgan' and not GRADIENT_PENALTY:
+            if MODE =='wgan' and not (LIPSCHITZ_NORMALIZER or GRADIENT_PENALTY):
                 for p in dis.parameters():
                     p.data.clamp_(-CLIP, CLIP)
 
@@ -300,7 +310,7 @@ while n_gen_update < N_ITER:
     avg_loss_D /= d_samples
     avg_penalty /= d_samples
 
-    print 'Iter: %i, Loss Generator: %.4f, Loss Discriminator: %.4f, Penalty: %.2e, IS: %.2f, Time: %.4f'%(n_gen_update, avg_loss_G, avg_loss_D, avg_penalty, gen_inception_score, time.time() - t)
+    print('Iter: %i, Loss Generator: %.4f, Loss Discriminator: %.4f, Penalty: %.2e, IS: %.2f, Time: %.4f'%(n_gen_update, avg_loss_G, avg_loss_D, avg_penalty, gen_inception_score, time.time() - t))
 
     f_writter.writerow((n_gen_update, avg_loss_G, avg_loss_D, avg_penalty, time.time() - t))
     f.flush()

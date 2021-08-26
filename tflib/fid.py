@@ -29,7 +29,7 @@ See --help to see further details.
 code from: https://github.com/bioinf-jku/TTUR/blob/master/fid.py
 '''
 
-from __future__ import absolute_import, division, print_function
+
 import numpy as np
 import os
 import gzip, pickle
@@ -37,7 +37,7 @@ import tensorflow as tf
 from scipy.misc import imread
 from scipy import linalg
 import pathlib
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import warnings
 
 class InvalidFIDException(Exception):

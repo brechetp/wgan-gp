@@ -262,9 +262,9 @@ while n_gen_update < N_ITER:
         dis_optimizer.zero_grad()
         dis_loss.backward(retain_graph=True)
         dis_optimizer.step()
-        if MODE =='wgan' and not LIPSCHITZ_NORMALIZER:
-            for p in dis.parameters():
-                p.data.clamp_(-CLIP, CLIP)
+        # if MODE =='wgan' and not LIPSCHITZ_NORMALIZER:
+            # for p in dis.parameters():
+                # p.data.clamp_(-CLIP, CLIP)
         for p in gen.parameters():
             p.requires_grad = True
 

@@ -26,6 +26,7 @@ import torch
 import torch.autograd as autograd
 import torch.nn as nn
 import numpy as np
+import random
 
 def clip_weights(params, clip=0.01):
     for p in params:
@@ -64,3 +65,17 @@ def compute_gan_loss(p_true, p_gen, mode='gan', gen_flag=False):
         raise NotImplementedError()
 
     return loss
+
+def pick_random():
+    logalpha = random.uniform(-1, 1)
+    logbeta = random.uniform(-1, 1)
+    alpha = 10**(logalpha)
+    beta = 10**(logbeta)
+    loglr = random.uniform(-5, -2)
+    lr = 10**(loglr)
+    lognhid = random.uniform(1, 5)
+    nhid = int(10**(lognhid) + 0.5)
+    return alpha, beta, nhid, lr
+
+
+

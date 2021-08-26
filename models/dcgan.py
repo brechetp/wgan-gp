@@ -25,6 +25,7 @@
 import torch.nn as nn
 import torch.nn.functional as F
 from .discriminator import Discriminator
+import torch
 
 class DCGAN32Generator(nn.Module):
     def __init__(self, n_in, n_out, n_filters=128, activation=F.relu, batchnorm=True):
@@ -59,7 +60,7 @@ class DCGAN32Generator(nn.Module):
             x = self.deconv3_bn(x)
         x = self.activation(x)
 
-        x = F.tanh(self.deconv5(x))
+        x = torch.tanh(self.deconv5(x))
 
         return x
 
