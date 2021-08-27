@@ -41,7 +41,8 @@ from normalizers import LipschitzNormalizer
 import random
 import pandas as pd
 import matplotlib as plt
-from datetime import datetime
+# from datetime import datetime
+import datetime
 
 import models
 import utils
@@ -77,25 +78,18 @@ parser.add_argument('--tensorboard', action='store_true')
 parser.add_argument('--inception-score', action='store_true')
 parser.add_argument('--default', action='store_true')
 parser.add_argument('-u', '--update-frequency', default=3, type=int)
+parser.add_argument('-gpu', "--gpu-index", type=int, help="gpu index to use")
 parser.add_argument('--pick_random', action="store_true")
 
 args = parser.parse_args()
 
-if args.pick_random:
-    args.alpha, args.beta, args.num_hidden, args.learning_rate_dsc = utils.pick_random()
-    args.learning_rate_gen = args.learning_rate_dsc
-    LRSTR =  f"lr={args.learning_rate_dsc:.1e}"
-else:
-    LRSTR = 'lrd=%.1e_lrg=%.1e'%(args.learning_rate_dsc, args.learning_rate_gen)
-
-dtype = torch.float
-num_gpus = torch.cuda.device_count()
-gpu_index = random.choice(range(num_gpus)) if num_gpus > 0  else 0
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu', gpu_index)
 
 if args.checkpoint is not None:  # we have some networks weights to continue
     try:
+        num_iter = args.num_iter
         checkpoint = torch.load(args.checkpoint, map_location=lambda storage, loc: storage)
+        args.__dict__.update(checkpoint["args"].__dict__)
+        args.num_iter = num_iter
         df = checkpoint['df'].dropna(how="all")
         if 'niter' in checkpoint.keys():
             ep = checkpoint['niter']['ep']
@@ -125,6 +119,20 @@ else:
     # columns=pd.MultiIndex.from_product([sets, stats, nets], names=names)
     columns=pd.Index(['niter gen', 'loss gen', 'loss dsc', 'GP', 'IS'])
     df = pd.DataFrame(columns=columns, index=pd.Index([], name='ep'))
+
+    if args.pick_random:
+        args.alpha, args.beta, args.num_hidden, args.learning_rate_dsc = utils.pick_random()
+        args.learning_rate_gen = args.learning_rate_dsc
+
+dtype = torch.float
+num_gpus = torch.cuda.device_count()
+if num_gpus > 0:
+    gpu_index = args.gpu_index % num_gpus if args.gpu_index is not None else random.choice(range(num_gpus))
+else:
+    gpu_index = 0
+# gpu_index = random.choice(range(num_gpus)) if num_gpus > 0  else 0
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu', gpu_index)
+
 
 start_n_gen = prev_n_gen = n_gen_update
 
@@ -189,9 +197,13 @@ if GRADIENT_PENALTY:
 
 NIN = args.num_latent
 NHID = args.num_hidden
-MODELSTR = os.path.join(f"nin-{NIN}-nhid-{NHID}", f"a-{args.alpha:.1e}-b-{args.beta:.1e}")
+MODELSTR = os.path.join(f"nin-{NIN}-nhid-{NHID}", f"a-{args.alpha:.1e}-b-{args.beta:.1e}-ln-{LIPSCHITZ_NORMALIZER}")
 
 
+if LEARNING_RATE_D == LEARNING_RATE_G:
+    LRSTR =  f"lr={LEARNING_RATE_D:.1e}"
+else:
+    LRSTR = 'lrd=%.1e_lrg=%.1e'%(LEARNING_RATE_D, LEARNING_RATE_G)
 
 OUTPUT_PATH = os.path.join(OUTPUT_PATH, MODELSTR, LRSTR)
 
@@ -220,7 +232,7 @@ if not os.path.exists(os.path.join(OUTPUT_PATH, 'gen')):
 resf = open(os.path.join(OUTPUT_PATH, 'results.csv'), 'a')
 logf = open(os.path.join(OUTPUT_PATH, 'logs.txt'), 'a')
 
-print("start at ", datetime.now(), file=logf)
+print("start at ", datetime.datetime.now(), file=logf)
 
 
 torch.autograd.set_detect_anomaly(True)
@@ -276,7 +288,7 @@ gen = models.TwoLayerNet(N_LATENT, NHID)
 # gen = DCGAN32Generator
 # gen = models.DCGAN32Generator(N_LATENT, N_CHANNEL, N_FILTERS_G, batchnorm=BATCH_NORM_G)
 # dsc = models.DCGAN32Discriminator(N_CHANNEL, 1, N_FILTERS_D, batchnorm=BATCH_NORM_D)
-dsc = models.DeepCNNDiscriminator((N_CHANNEL, RESOLUTION, RESOLUTION))
+dsc = models.DeepCNNDiscriminator((N_CHANNEL, RESOLUTION, RESOLUTION), ln=LIPSCHITZ_NORMALIZER)
 
 if "model" in checkpoint.keys():
     gen.load_state_dict(checkpoint["model"]["gen"])
@@ -516,10 +528,10 @@ while n_gen_update < N_ITER+start_n_gen:
         plot(fname, df)
         Vs = gen.compute_svdvals()  # one for each layer
         fname = os.path.join(OUTPUT_PATH, f"plots/svd_gen_{n_gen_update}.pdf")
-        plot(fname, Vs)
+        plot(fname, Vs, n_gen_update)
         Vs = dsc.compute_svdvals()  # one for each layer
         fname = os.path.join(OUTPUT_PATH, f"plots/svd_dsc_{n_gen_update}.pdf")
-        plot(fname, Vs)
+        plot(fname, Vs, n_gen_update)
 
     if TENSORBOARD_FLAG:
         writer.add_scalar('loss_G', avg_loss_G, n_gen_update)
@@ -530,6 +542,6 @@ while n_gen_update < N_ITER+start_n_gen:
         writer.add_image('gen', x.data, n_gen_update)
 save_checkpoint()
 resf.close()
-print("end at ", datetime.now(), file=logf)
-print("total time:", total_time, file=logf)
+print("end at ", datetime.datetime.now(), file=logf)
+print("total time:", datetime.timedelta(seconds=total_time), file=logf)
 logf.close()
